@@ -1,0 +1,48 @@
+# =============================================================================
+# CellMap BioAnalytics — Backend Dependencies
+# =============================================================================
+
+# ---- Web Framework ----
+fastapi==0.115.0
+uvicorn[standard]==0.30.0
+python-multipart==0.0.9
+pydantic==2.9.0
+pydantic-settings==2.5.0
+
+# ---- Database ----
+sqlalchemy[asyncio]==2.0.35
+asyncpg==0.29.0
+alembic==1.13.0
+
+# ---- Auth ----
+python-jose[cryptography]==3.3.0
+passlib[bcrypt]==1.7.4
+bcrypt==4.2.0
+
+# ---- Task Queue ----
+celery[redis]==5.4.0
+redis==5.1.0
+
+# ---- Scientific Computing ----
+numpy==1.26.4
+pandas==2.2.2
+scipy==1.14.0
+scikit-learn==1.5.1
+anndata==0.10.8
+scanpy==1.10.2
+umap-learn==0.5.6
+leidenalg==0.10.2
+hdbscan==0.8.38
+igraph==0.11.6
+
+# ---- Visualization ----
+plotly==5.24.0
+matplotlib==3.9.2
+
+# ---- Utilities ----
+h5py==3.11.0
+tables==3.10.1
+aiofiles==24.1.0
+python-dotenv==1.0.1
+loguru==0.7.2
+orjson==3.10.7
