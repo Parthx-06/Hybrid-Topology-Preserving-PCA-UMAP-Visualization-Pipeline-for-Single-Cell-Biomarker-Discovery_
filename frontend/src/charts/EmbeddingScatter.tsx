@@ -1,15 +1,16 @@
 import React, { useRef, useEffect, useState } from 'react';
 import { CellPoint } from '../types';
-import { ZoomIn, ZoomOut, RotateCcw, Eye } from 'lucide-react';
+import { ZoomIn, ZoomOut, RotateCcw, Eye, MousePointer } from 'lucide-react';
 
 interface EmbeddingScatterProps {
   cells: CellPoint[];
   title: string;
-  colorBy: 'cluster' | 'batch' | 'condition' | 'gene';
+  colorBy: 'cluster' | 'batch' | 'condition' | 'gene' | 'cell_cycle';
   geneName?: string;
   height?: number;
   highlightCluster?: number | null;
   onSelectCluster?: (clusterId: number | null) => void;
+  onSelectCell?: (cell: CellPoint) => void;
 }
 
 const CLUSTER_COLORS = [
@@ -23,6 +24,9 @@ const CLUSTER_COLORS = [
 ];
 
 const BATCH_COLORS: Record<string, string> = {
+  Batch_01: '#38bdf8',
+  Batch_02: '#f43f5e',
+  Batch_03: '#34d399',
   Batch_A: '#38bdf8',
   Batch_B: '#f43f5e',
   Batch_C: '#34d399',
@@ -33,6 +37,12 @@ const CONDITION_COLORS: Record<string, string> = {
   Stimulated: '#f97316',
 };
 
+const CELL_CYCLE_COLORS: Record<string, string> = {
+  G1: '#06b6d4',
+  S: '#f59e0b',
+  'G2/M': '#a855f7',
+};
+
 export const EmbeddingScatter: React.FC<EmbeddingScatterProps> = ({
   cells,
   title,
@@ -41,6 +51,7 @@ export const EmbeddingScatter: React.FC<EmbeddingScatterProps> = ({
   height = 420,
   highlightCluster = null,
   onSelectCluster,
+  onSelectCell,
 }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -141,14 +152,15 @@ export const EmbeddingScatter: React.FC<EmbeddingScatterProps> = ({
         color = BATCH_COLORS[cell.batch] || '#38bdf8';
       } else if (colorBy === 'condition') {
         color = CONDITION_COLORS[cell.condition] || '#06b6d4';
+      } else if (colorBy === 'cell_cycle') {
+        color = CELL_CYCLE_COLORS[cell.cell_cycle || 'G1'] || '#06b6d4';
       } else if (colorBy === 'gene') {
-        // Mock continuous expression based on cluster markers
         let expr = 0.1;
-        if (cell.cluster === 0 && (geneName === 'CD3D' || geneName === 'CD4')) expr = 0.95;
-        if (cell.cluster === 1 && (geneName === 'CD19' || geneName === 'MS4A1')) expr = 0.95;
-        if (cell.cluster === 2 && (geneName === 'CD14' || geneName === 'LYZ')) expr = 0.95;
-        if (cell.cluster === 3 && (geneName === 'NKG7' || geneName === 'GNLY')) expr = 0.95;
-        if (cell.cluster === 4 && (geneName === 'FCER1A' || geneName === 'CLEC10A')) expr = 0.95;
+        if (cell.cluster === 0 && (geneName === 'CD3D' || geneName === 'CD4' || geneName === 'SOX2' || geneName === 'INS')) expr = 0.95;
+        if (cell.cluster === 1 && (geneName === 'CD19' || geneName === 'MS4A1' || geneName === 'CD68' || geneName === 'GCG')) expr = 0.95;
+        if (cell.cluster === 2 && (geneName === 'CD14' || geneName === 'LYZ' || geneName === 'GFAP' || geneName === 'SST')) expr = 0.95;
+        if (cell.cluster === 3 && (geneName === 'NKG7' || geneName === 'GNLY' || geneName === 'MBP' || geneName === 'PRSS1')) expr = 0.95;
+        if (cell.cluster === 4 && (geneName === 'FCER1A' || geneName === 'CLEC10A' || geneName === 'PECAM1' || geneName === 'KRT19')) expr = 0.95;
         color = `rgb(${Math.round(6 + expr * 240)}, ${Math.round(182 - expr * 50)}, ${Math.round(212 + expr * 40)})`;
       }
 
@@ -183,16 +195,18 @@ export const EmbeddingScatter: React.FC<EmbeddingScatterProps> = ({
       return;
     }
 
-    // Hover search (nearest cell)
+    // Hit test for tooltip
+    const width = canvas.width;
+    const h = canvas.height;
     let closestCell: CellPoint | null = null;
-    let minDist = 14; // pixels radius
+    let minDist = 12; // Pixels threshold
 
-    for (const c of cells) {
-      const { px, py } = project(c.x, c.y, rect.width, rect.height);
+    for (const cell of cells) {
+      const { px, py } = project(cell.x, cell.y, width, h);
       const dist = Math.hypot(px - mouseX, py - mouseY);
       if (dist < minDist) {
         minDist = dist;
-        closestCell = c;
+        closestCell = cell;
       }
     }
 
@@ -207,10 +221,15 @@ export const EmbeddingScatter: React.FC<EmbeddingScatterProps> = ({
     }
   };
 
-  const handleMouseUp = () => setIsDragging(false);
+  const handleMouseUp = () => {
+    setIsDragging(false);
+    if (hoveredCell && onSelectCell) {
+      onSelectCell(hoveredCell.cell);
+    }
+  };
 
   const handleZoom = (factor: number) => {
-    setScale((prev) => Math.min(Math.max(prev * factor, 0.5), 5.0));
+    setScale((prev) => Math.max(0.5, Math.min(6, prev * factor)));
   };
 
   const handleReset = () => {
@@ -220,22 +239,20 @@ export const EmbeddingScatter: React.FC<EmbeddingScatterProps> = ({
   };
 
   return (
-    <div className="glass-card" style={{ padding: '16px', position: 'relative' }} ref={containerRef}>
-      {/* Title Bar & Canvas Controls */}
+    <div className="glass-card" ref={containerRef} style={{ padding: '16px', position: 'relative' }}>
+      {/* Title & Controls Bar */}
       <div
         style={{
           display: 'flex',
-          alignItems: 'center',
           justifyContent: 'space-between',
+          alignItems: 'center',
           marginBottom: '12px',
         }}
       >
         <div>
-          <h4 style={{ fontSize: '14px', fontWeight: 700, color: 'var(--text-primary)' }}>
-            {title}
-          </h4>
+          <h4 style={{ fontSize: '14px', fontWeight: 700, color: 'var(--text-primary)' }}>{title}</h4>
           <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
-            N = {cells.length.toLocaleString()} cells &bull; Color: {colorBy}
+            {cells.length.toLocaleString()} cells &bull; Click any point to inspect single-cell phenotype
           </div>
         </div>
 
@@ -274,7 +291,7 @@ export const EmbeddingScatter: React.FC<EmbeddingScatterProps> = ({
           ref={canvasRef}
           width={640}
           height={height}
-          style={{ width: '100%', height: '100%', display: 'block', cursor: isDragging ? 'grabbing' : 'grab' }}
+          style={{ width: '100%', height: '100%', display: 'block', cursor: isDragging ? 'grabbing' : 'pointer' }}
           onMouseDown={handleMouseDown}
           onMouseMove={handleMouseMove}
           onMouseUp={handleMouseUp}
@@ -293,17 +310,18 @@ export const EmbeddingScatter: React.FC<EmbeddingScatterProps> = ({
               top: `${hoveredCell.screenY - 12}px`,
             }}
           >
-            <div style={{ fontWeight: 700, color: 'var(--cyan-400)', fontSize: '12px' }}>
-              {hoveredCell.cell.id}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '4px', fontWeight: 700, color: 'var(--cyan-400)', fontSize: '12px' }}>
+              <MousePointer size={11} />
+              <span>{hoveredCell.cell.id}</span>
             </div>
             <div style={{ fontSize: '11px', color: '#cbd5e1', marginTop: '2px' }}>
               Type: <strong>{hoveredCell.cell.cell_type}</strong> (Cl {hoveredCell.cell.cluster})
             </div>
             <div style={{ fontSize: '10px', color: 'var(--text-muted)' }}>
-              Batch: {hoveredCell.cell.batch} &bull; {hoveredCell.cell.condition}
+              Batch: {hoveredCell.cell.batch} &bull; {hoveredCell.cell.cell_cycle || 'G1'} Phase
             </div>
-            <div style={{ fontSize: '10px', color: '#94a3b8', marginTop: '2px' }}>
-              Coords: ({hoveredCell.cell.x}, {hoveredCell.cell.y})
+            <div style={{ fontSize: '10px', color: '#34d399', marginTop: '2px', fontWeight: 600 }}>
+              Click cell to inspect &rarr;
             </div>
           </div>
         )}
@@ -322,7 +340,7 @@ export const EmbeddingScatter: React.FC<EmbeddingScatterProps> = ({
         }}
       >
         {colorBy === 'cluster' &&
-          ['T Cells (0)', 'B Cells (1)', 'Monocytes (2)', 'NK Cells (3)', 'Dendritic (4)'].map((name, idx) => (
+          ['Population 0', 'Population 1', 'Population 2', 'Population 3', 'Population 4'].map((name, idx) => (
             <div
               key={idx}
               onClick={() => onSelectCluster && onSelectCluster(highlightCluster === idx ? null : idx)}
@@ -344,6 +362,14 @@ export const EmbeddingScatter: React.FC<EmbeddingScatterProps> = ({
                 }}
               />
               <span style={{ color: 'var(--text-secondary)' }}>{name}</span>
+            </div>
+          ))}
+
+        {colorBy === 'cell_cycle' &&
+          Object.entries(CELL_CYCLE_COLORS).map(([phase, color]) => (
+            <div key={phase} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <div style={{ width: '9px', height: '9px', borderRadius: '50%', background: color }} />
+              <span style={{ color: 'var(--text-secondary)' }}>{phase} Phase</span>
             </div>
           ))}
       </div>

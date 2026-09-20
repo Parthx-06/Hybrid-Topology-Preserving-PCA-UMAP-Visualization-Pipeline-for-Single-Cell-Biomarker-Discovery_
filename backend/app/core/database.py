@@ -12,12 +12,19 @@ from sqlalchemy.orm import DeclarativeBase
 
 from app.core.config import settings
 
-is_sqlite = settings.database_url.startswith("sqlite")
+# Normalize Render / cloud provider database URLs for asyncpg
+db_url = settings.database_url
+if db_url.startswith("postgres://"):
+    db_url = db_url.replace("postgres://", "postgresql+asyncpg://", 1)
+elif db_url.startswith("postgresql://") and not db_url.startswith("postgresql+asyncpg://"):
+    db_url = db_url.replace("postgresql://", "postgresql+asyncpg://", 1)
+
+is_sqlite = db_url.startswith("sqlite")
 engine_kwargs = {"echo": settings.debug}
 if not is_sqlite:
     engine_kwargs.update({"pool_size": 10, "max_overflow": 20, "pool_pre_ping": True})
 
-engine = create_async_engine(settings.database_url, **engine_kwargs)
+engine = create_async_engine(db_url, **engine_kwargs)
 async_engine = engine
 
 async_session_factory = async_sessionmaker(

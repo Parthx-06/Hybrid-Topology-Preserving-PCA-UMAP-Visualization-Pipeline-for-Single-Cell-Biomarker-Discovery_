@@ -10,6 +10,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import settings
 from app.core.database import get_db
 from app.core.security import get_current_user
 from app.models.dataset import Dataset
@@ -113,12 +114,32 @@ async def run_pipeline_step(
     for j in jobs:
         await db.refresh(j)
 
-    # Dispatch to Celery
+    # Dispatch to Celery or background thread (for local dev without Redis)
     from app.workers.tasks import run_analysis_step
-    for j in jobs:
-        task = run_analysis_step.delay(j.id, exp.id, j.step)
-        j.task_id = task.id
-    await db.flush()
+    from app.workers.celery_app import celery_app
+    import uuid
+    import threading
+
+    is_eager = getattr(celery_app.conf, "task_always_eager", False)
+
+    if is_eager:
+        for j in jobs:
+            j.task_id = str(uuid.uuid4())
+        await db.flush()
+
+        def _run_eager_sequence(step_list):
+            for job_item in step_list:
+                try:
+                    run_analysis_step.apply(args=(job_item.id, exp.id, job_item.step), task_id=job_item.task_id)
+                except Exception:
+                    break
+
+        threading.Thread(target=_run_eager_sequence, args=(list(jobs),), daemon=True).start()
+    else:
+        for j in jobs:
+            task = run_analysis_step.delay(j.id, exp.id, j.step)
+            j.task_id = task.id
+        await db.flush()
 
     exp.status = "running"
     await db.flush()

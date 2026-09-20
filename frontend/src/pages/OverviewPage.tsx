@@ -8,6 +8,8 @@ import {
   TrendingUp,
   Cpu,
   ArrowRight,
+  Play,
+  Grid,
 } from 'lucide-react';
 import {
   BiomarkerItem,
@@ -27,6 +29,8 @@ interface OverviewPageProps {
   biomarkers: BiomarkerItem[];
   hybridCells: CellPoint[];
   onNavigateTab: (tab: any) => void;
+  onSelectCell?: (cell: CellPoint) => void;
+  onOpenPipelineRunner?: () => void;
 }
 
 export const OverviewPage: React.FC<OverviewPageProps> = ({
@@ -37,6 +41,8 @@ export const OverviewPage: React.FC<OverviewPageProps> = ({
   biomarkers,
   hybridCells,
   onNavigateTab,
+  onSelectCell,
+  onOpenPipelineRunner,
 }) => {
   const hybridBench = benchmarks.hybrid || {
     knn_preservation: 0.884,
@@ -97,7 +103,7 @@ export const OverviewPage: React.FC<OverviewPageProps> = ({
         </div>
       </div>
 
-      {/* Pipeline Execution Stepper */}
+      {/* Pipeline Execution Stepper & Runner Trigger */}
       <div className="glass-card">
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
           <div>
@@ -108,7 +114,19 @@ export const OverviewPage: React.FC<OverviewPageProps> = ({
               Deterministic scRNA-seq workflow with progress tracking and reproducibility stamps
             </div>
           </div>
-          <span className="badge badge-emerald">All 7 Steps Complete</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <span className="badge badge-emerald">All 7 Steps Complete</span>
+            {onOpenPipelineRunner && (
+              <button
+                className="btn btn-outline"
+                style={{ padding: '4px 10px', fontSize: '11px' }}
+                onClick={onOpenPipelineRunner}
+              >
+                <Play size={11} />
+                <span>Configure &amp; Re-run</span>
+              </button>
+            )}
+          </div>
         </div>
 
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '12px' }}>
@@ -158,6 +176,7 @@ export const OverviewPage: React.FC<OverviewPageProps> = ({
             title="Hybrid PCA → UMAP Manifold (Topology-Preserved)"
             colorBy="cluster"
             height={380}
+            onSelectCell={onSelectCell}
           />
         </div>
 
@@ -214,44 +233,64 @@ export const OverviewPage: React.FC<OverviewPageProps> = ({
             </div>
           </div>
 
-          {/* Top Biomarker preview callout */}
-          <div
-            style={{
-              marginTop: '16px',
-              padding: '14px',
-              background: 'rgba(6, 182, 212, 0.05)',
-              border: '1px solid rgba(6, 182, 212, 0.2)',
-              borderRadius: '8px',
-            }}
-          >
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
-              <span style={{ fontSize: '12px', fontWeight: 700, color: 'var(--cyan-400)' }}>
-                Top Ranked Biomarkers Discovered
-              </span>
-              <button
-                onClick={() => onNavigateTab('biomarkers')}
-                style={{ background: 'none', border: 'none', color: 'var(--cyan-300)', fontSize: '11px', cursor: 'pointer', fontWeight: 600 }}
-              >
-                View all ({biomarkers.length}) &rarr;
-              </button>
-            </div>
-            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-              {biomarkers.slice(0, 6).map((b) => (
-                <span
-                  key={b.gene_symbol}
-                  style={{
-                    padding: '2px 8px',
-                    borderRadius: '4px',
-                    background: 'var(--bg-tertiary)',
-                    fontSize: '11px',
-                    fontWeight: 600,
-                    color: 'var(--text-primary)',
-                    border: '1px solid var(--border-subtle)',
-                  }}
-                >
-                  {b.gene_symbol} <span style={{ color: 'var(--cyan-400)', fontSize: '10px' }}>AUC:{b.roc_auc.toFixed(2)}</span>
+          {/* Quick Shortcuts & Top Biomarker preview callout */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '16px' }}>
+            <div
+              style={{
+                padding: '12px 14px',
+                background: 'rgba(6, 182, 212, 0.05)',
+                border: '1px solid rgba(6, 182, 212, 0.2)',
+                borderRadius: '8px',
+              }}
+            >
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                <span style={{ fontSize: '12px', fontWeight: 700, color: 'var(--cyan-400)' }}>
+                  Discovered Diagnostic Biomarkers
                 </span>
-              ))}
+                <button
+                  onClick={() => onNavigateTab('biomarkers')}
+                  style={{ background: 'none', border: 'none', color: 'var(--cyan-300)', fontSize: '11px', cursor: 'pointer', fontWeight: 600 }}
+                >
+                  View all ({biomarkers.length}) &rarr;
+                </button>
+              </div>
+              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                {biomarkers.slice(0, 5).map((b) => (
+                  <span
+                    key={b.gene_symbol}
+                    style={{
+                      padding: '2px 8px',
+                      borderRadius: '4px',
+                      background: 'var(--bg-tertiary)',
+                      fontSize: '11px',
+                      fontWeight: 600,
+                      color: 'var(--text-primary)',
+                      border: '1px solid var(--border-subtle)',
+                    }}
+                  >
+                    {b.gene_symbol} <span style={{ color: 'var(--cyan-400)', fontSize: '10px' }}>AUC:{b.roc_auc.toFixed(2)}</span>
+                  </span>
+                ))}
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', gap: '10px' }}>
+              <button
+                className="btn btn-outline"
+                style={{ flex: 1, fontSize: '11px', padding: '6px' }}
+                onClick={() => onNavigateTab('clusters')}
+              >
+                <Grid size={12} />
+                <span>Marker DotPlot</span>
+              </button>
+              <button
+                className="btn btn-outline"
+                style={{ flex: 1, fontSize: '11px', padding: '6px' }}
+                onClick={() => onNavigateTab('biomarkers')}
+              >
+                <Layers size={12} />
+                <span>GSEA Pathways</span>
+              </button>
             </div>
           </div>
         </div>

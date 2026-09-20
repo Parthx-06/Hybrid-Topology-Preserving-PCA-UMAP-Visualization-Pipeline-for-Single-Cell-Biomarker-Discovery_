@@ -10,39 +10,60 @@ import { ClusterExplorerPage } from './pages/ClusterExplorerPage';
 import { BiomarkerDiscoveryPage } from './pages/BiomarkerDiscoveryPage';
 import { GeneLookupPage } from './pages/GeneLookupPage';
 import { ProvenanceReportPage } from './pages/ProvenanceReportPage';
+import { ResearchMethodologyPage } from './pages/ResearchMethodologyPage';
+
+import { PipelineRunnerModal } from './components/PipelineRunnerModal';
+import { CellInspectorDrawer } from './components/CellInspectorDrawer';
+import { CommandPaletteModal } from './components/CommandPaletteModal';
+import { TelemetryDrawer } from './components/TelemetryDrawer';
 
 import {
-  BIOMARKERS_DATA,
-  CLUSTERS_DATA,
-  EMBEDDINGS_DATA,
-  INITIAL_EXPERIMENT,
-  INITIAL_PIPELINE_STEPS,
-  QC_METRICS,
-  TOPOLOGY_BENCHMARKS,
+  COHORTS_DATA_REGISTRY,
+  DATASET_COHORTS,
+  SAMPLE_CELL_DETAILS,
 } from './services/mockData';
+import { API_BASE } from './services/api';
+import { CellPoint, SingleCellDetail } from './types';
 
 function App() {
   const [currentTab, setCurrentTab] = useState<NavTab>('overview');
   const [theme, setTheme] = useState<'dark' | 'light'>('dark');
+  const [selectedCohortId, setSelectedCohortId] = useState<string>('pbmc3k');
   const [isRunning, setIsRunning] = useState(false);
   const [biomarkerClusterId, setBiomarkerClusterId] = useState<number | null>(null);
+
+  // Modals & Drawers state
+  const [isPipelineModalOpen, setIsPipelineModalOpen] = useState(false);
+  const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
+  const [isTelemetryOpen, setIsTelemetryOpen] = useState(false);
+  const [inspectorCell, setInspectorCell] = useState<SingleCellDetail | null>(null);
+
+  // Dynamic Cohort Data Resolution
+  const activeCohortData = COHORTS_DATA_REGISTRY[selectedCohortId] || COHORTS_DATA_REGISTRY['pbmc3k'];
 
   // Theme toggling
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme);
   }, [theme]);
 
+  // Global Keyboard Shortcuts (Ctrl+K / Cmd+K)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+        e.preventDefault();
+        setIsCommandPaletteOpen((prev) => !prev);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
   const handleToggleTheme = () => {
     setTheme((prev) => (prev === 'dark' ? 'light' : 'dark'));
   };
 
-  const handleRunPipeline = () => {
-    setIsRunning(true);
-    setTimeout(() => setIsRunning(false), 3000);
-  };
-
   const handleExportReport = () => {
-    window.open('/api/v1/reports/1/html', '_blank');
+    window.open(`${API_BASE}/reports/1/html`, '_blank');
   };
 
   const handleSelectClusterForBiomarkers = (clusterId: number) => {
@@ -54,25 +75,57 @@ function App() {
     console.log('[CellMap] QC filters applied:', { minCounts, minGenes, maxMito });
   };
 
+  // Cell Click Inspector Handler
+  const handleSelectCell = (cell: CellPoint) => {
+    const existing = SAMPLE_CELL_DETAILS[cell.id];
+    if (existing) {
+      setInspectorCell(existing);
+    } else {
+      // Synthesize realistic single cell detail
+      setInspectorCell({
+        barcode: `AAAC${cell.id.toUpperCase().replace(/[^A-Z0-9]/g, '')}-1`,
+        cluster_id: cell.cluster,
+        cluster_name: cell.cell_type,
+        cell_type: cell.cell_type,
+        total_counts: cell.umi_count || 4820,
+        detected_genes: cell.gene_count || 1240,
+        mito_percent: cell.mito_pct || 3.4,
+        cell_cycle_phase: cell.cell_cycle || 'G1',
+        top_markers: [
+          { gene: 'CD3D', expression: 4.8 },
+          { gene: 'IL7R', expression: 3.9 },
+          { gene: 'LEF1', expression: 3.1 },
+        ],
+        batch: cell.batch || 'Batch_01',
+        condition: cell.condition || 'Healthy Control',
+      });
+    }
+  };
+
   const renderPage = () => {
     switch (currentTab) {
       case 'overview':
         return (
           <OverviewPage
-            experiment={INITIAL_EXPERIMENT}
-            steps={INITIAL_PIPELINE_STEPS}
-            benchmarks={TOPOLOGY_BENCHMARKS}
-            clusters={CLUSTERS_DATA}
-            biomarkers={BIOMARKERS_DATA}
-            hybridCells={EMBEDDINGS_DATA.hybrid}
+            experiment={activeCohortData.experiment}
+            steps={activeCohortData.steps}
+            benchmarks={activeCohortData.benchmarks}
+            clusters={activeCohortData.clusters}
+            biomarkers={activeCohortData.biomarkers}
+            hybridCells={activeCohortData.embeddings.hybrid}
             onNavigateTab={setCurrentTab}
+            onSelectCell={handleSelectCell}
+            onOpenPipelineRunner={() => setIsPipelineModalOpen(true)}
           />
         );
+
+      case 'methodology':
+        return <ResearchMethodologyPage />;
 
       case 'qc':
         return (
           <QualityControlPage
-            qc={QC_METRICS}
+            qc={activeCohortData.qc}
             onApplyQC={handleApplyQC}
           />
         );
@@ -80,17 +133,19 @@ function App() {
       case 'embeddings':
         return (
           <EmbeddingExplorerPage
-            hybridCells={EMBEDDINGS_DATA.hybrid}
-            directCells={EMBEDDINGS_DATA.direct}
-            pcaCells={EMBEDDINGS_DATA.pca}
-            benchmarks={TOPOLOGY_BENCHMARKS}
+            hybridCells={activeCohortData.embeddings.hybrid}
+            directCells={activeCohortData.embeddings.direct}
+            pcaCells={activeCohortData.embeddings.pca}
+            benchmarks={activeCohortData.benchmarks}
+            onSelectCell={handleSelectCell}
           />
         );
 
       case 'clusters':
         return (
           <ClusterExplorerPage
-            clusters={CLUSTERS_DATA}
+            clusters={activeCohortData.clusters}
+            dotplotData={activeCohortData.dotplot}
             onSelectClusterForBiomarkers={handleSelectClusterForBiomarkers}
           />
         );
@@ -98,31 +153,21 @@ function App() {
       case 'biomarkers':
         return (
           <BiomarkerDiscoveryPage
-            biomarkers={BIOMARKERS_DATA}
+            biomarkers={activeCohortData.biomarkers}
+            pathways={activeCohortData.pathways}
             initialClusterId={biomarkerClusterId}
           />
         );
 
       case 'genes':
-        return <GeneLookupPage hybridCells={EMBEDDINGS_DATA.hybrid} />;
+        return <GeneLookupPage hybridCells={activeCohortData.embeddings.hybrid} />;
 
       case 'reports':
-        return <ProvenanceReportPage experiment={INITIAL_EXPERIMENT} />;
+        return <ProvenanceReportPage experiment={activeCohortData.experiment} />;
 
       default:
         return null;
     }
-  };
-
-  // Page titles for header breadcrumbs
-  const pageTitles: Record<NavTab, string> = {
-    overview: 'Pipeline Dashboard',
-    qc: 'Quality Control & Filtering',
-    embeddings: 'Topology-Preserving Embedding Explorer',
-    clusters: 'Leiden Cell Cluster Architecture',
-    biomarkers: 'Multi-Criteria Biomarker Discovery',
-    genes: 'Gene Expression Feature Explorer',
-    reports: 'Provenance & Reproducibility Report',
   };
 
   return (
@@ -134,46 +179,69 @@ function App() {
           if (tab !== 'biomarkers') setBiomarkerClusterId(null);
           setCurrentTab(tab);
         }}
-        cellCount={INITIAL_EXPERIMENT.cell_count}
+        cellCount={activeCohortData.experiment.cell_count}
       />
 
       {/* Main Panel */}
       <div className="main-content">
-        {/* Header */}
+        {/* Enterprise Header */}
         <Header
-          experiment={INITIAL_EXPERIMENT}
+          experiment={activeCohortData.experiment}
+          selectedCohortId={selectedCohortId}
+          onSelectCohort={setSelectedCohortId}
           isRunning={isRunning}
-          onRunPipeline={handleRunPipeline}
+          onOpenPipelineRunner={() => setIsPipelineModalOpen(true)}
           onExportReport={handleExportReport}
+          onOpenCommandPalette={() => setIsCommandPaletteOpen(true)}
+          onOpenTelemetry={() => setIsTelemetryOpen(true)}
           theme={theme}
           onToggleTheme={handleToggleTheme}
         />
 
-        {/* Page Content */}
-        <div className="content-body">
-          {/* Breadcrumb / Page Title */}
-          <div
-            style={{
-              marginBottom: '20px',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px',
-              fontSize: '12px',
-              color: 'var(--text-muted)',
-            }}
-          >
-            <span>CellMap BioAnalytics</span>
-            <span style={{ color: 'var(--border-medium)' }}>/</span>
-            <span>Experiment #{INITIAL_EXPERIMENT.id}</span>
-            <span style={{ color: 'var(--border-medium)' }}>/</span>
-            <span style={{ color: 'var(--cyan-400)', fontWeight: 600 }}>
-              {pageTitles[currentTab]}
-            </span>
-          </div>
-
+        {/* Dynamic Main Body Content */}
+        <main className="page-content" id="main-content-region">
           {renderPage()}
-        </div>
+        </main>
       </div>
+
+      {/* Production Pipeline Orchestration Modal */}
+      <PipelineRunnerModal
+        isOpen={isPipelineModalOpen}
+        onClose={() => setIsPipelineModalOpen(false)}
+        datasetName={activeCohortData.cohort.name}
+        onPipelineCompleted={() => {
+          setIsRunning(false);
+          console.log('[CellMap] Pipeline workflow completed.');
+        }}
+      />
+
+      {/* Single-Cell Inspector Slide-Out Drawer */}
+      <CellInspectorDrawer
+        isOpen={Boolean(inspectorCell)}
+        cell={inspectorCell}
+        onClose={() => setInspectorCell(null)}
+        onHighlightCluster={handleSelectClusterForBiomarkers}
+      />
+
+      {/* Command Palette Modal (Ctrl + K) */}
+      <CommandPaletteModal
+        isOpen={isCommandPaletteOpen}
+        onClose={() => setIsCommandPaletteOpen(false)}
+        onNavigateTab={(tab) => {
+          if (tab !== 'biomarkers') setBiomarkerClusterId(null);
+          setCurrentTab(tab);
+        }}
+        onSelectCohort={setSelectedCohortId}
+        onOpenPipelineRunner={() => setIsPipelineModalOpen(true)}
+        onToggleTheme={handleToggleTheme}
+        theme={theme}
+      />
+
+      {/* System & Worker Cluster Telemetry Drawer */}
+      <TelemetryDrawer
+        isOpen={isTelemetryOpen}
+        onClose={() => setIsTelemetryOpen(false)}
+      />
     </div>
   );
 }

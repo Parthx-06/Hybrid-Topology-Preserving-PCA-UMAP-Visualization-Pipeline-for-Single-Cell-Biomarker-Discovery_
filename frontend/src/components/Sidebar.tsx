@@ -9,11 +9,12 @@ import {
   FileText,
   Activity,
   Cpu,
-  Database,
+  BookOpen,
 } from 'lucide-react';
 
 export type NavTab =
   | 'overview'
+  | 'methodology'
   | 'qc'
   | 'embeddings'
   | 'clusters'
@@ -34,6 +35,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 }) => {
   const navItems = [
     { id: 'overview' as NavTab, label: 'Overview', icon: LayoutDashboard, badge: null },
+    { id: 'methodology' as NavTab, label: 'Research Methodology', icon: BookOpen, badge: 'CO5' },
     { id: 'qc' as NavTab, label: 'Quality Control', icon: ShieldCheck, badge: 'Pass' },
     { id: 'embeddings' as NavTab, label: 'Embedding Explorer', icon: Compass, badge: 'Hybrid' },
     { id: 'clusters' as NavTab, label: 'Cell Clusters', icon: Boxes, badge: '5 Types' },

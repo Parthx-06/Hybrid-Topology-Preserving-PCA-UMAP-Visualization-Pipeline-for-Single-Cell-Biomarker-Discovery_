@@ -21,7 +21,10 @@ from app.core.config import settings
 from app.workers.celery_app import celery_app
 
 # Use synchronous SQLAlchemy for Celery workers
-SYNC_DB_URL = settings.database_url.replace("+asyncpg", "").replace("+aiosqlite", "")
+_raw_sync = settings.database_url.replace("+asyncpg", "").replace("+aiosqlite", "")
+if _raw_sync.startswith("postgres://"):
+    _raw_sync = _raw_sync.replace("postgres://", "postgresql://", 1)
+SYNC_DB_URL = _raw_sync
 sync_engine = create_engine(SYNC_DB_URL)
 SyncSession = sessionmaker(bind=sync_engine)
 

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { VOLCANO_GENES } from '../services/mockData';
+import { VOLCANO_GENES, VolcanoGeneItem } from '../services/mockData';
 
 interface VolcanoPlotProps {
   onSelectGene?: (gene: string) => void;
@@ -119,7 +119,7 @@ export const VolcanoPlot: React.FC<VolcanoPlotProps> = ({
           </text>
 
           {/* Points */}
-          {VOLCANO_GENES.map((g) => {
+          {VOLCANO_GENES.map((g: VolcanoGeneItem) => {
             const negLogP = -Math.log10(Math.max(g.pvalue_adj, 1e-58));
             const sx = toScreenX(g.log2fc);
             const sy = toScreenY(negLogP);

@@ -18,7 +18,8 @@ import {
   TopologyBenchmark,
 } from '../types';
 
-const API_BASE = '/api/v1';
+const BACKEND_URL = (import.meta.env.VITE_API_URL || '').replace(/\/+$/, '');
+export const API_BASE = `${BACKEND_URL}/api/v1`;
 
 export class ApiService {
   private static token: string | null = null;

@@ -1,16 +1,20 @@
 import React, { useState } from 'react';
-import { BiomarkerItem } from '../types';
+import { BiomarkerItem, PathwayEnrichment } from '../types';
 import { VolcanoPlot } from '../charts/VolcanoPlot';
 import { BiomarkerModal } from '../components/BiomarkerModal';
-import { Dna, Search, Download, Filter, HelpCircle, ArrowUpDown } from 'lucide-react';
+import { PathwayEnrichmentCard } from '../components/PathwayEnrichmentCard';
+import { Dna, Search, Download, Filter, HelpCircle, Pill, ShieldCheck, Layers } from 'lucide-react';
+import { PATHWAY_ENRICHMENT_DATA } from '../services/mockData';
 
 interface BiomarkerDiscoveryPageProps {
   biomarkers: BiomarkerItem[];
+  pathways?: PathwayEnrichment[];
   initialClusterId?: number | null;
 }
 
 export const BiomarkerDiscoveryPage: React.FC<BiomarkerDiscoveryPageProps> = ({
   biomarkers,
+  pathways = PATHWAY_ENRICHMENT_DATA,
   initialClusterId = null,
 }) => {
   const [selectedClusterFilter, setSelectedClusterFilter] = useState<string>(
@@ -18,6 +22,7 @@ export const BiomarkerDiscoveryPage: React.FC<BiomarkerDiscoveryPageProps> = ({
   );
   const [minAuc, setMinAuc] = useState<number>(0.85);
   const [searchQuery, setSearchQuery] = useState<string>('');
+  const [tierFilter, setTierFilter] = useState<string>('all');
   const [selectedBiomarker, setSelectedBiomarker] = useState<BiomarkerItem | null>(null);
   const [sortField, setSortField] = useState<'composite_score' | 'roc_auc' | 'log2_fc'>('composite_score');
 
@@ -25,6 +30,9 @@ export const BiomarkerDiscoveryPage: React.FC<BiomarkerDiscoveryPageProps> = ({
   const filtered = biomarkers
     .filter((b) => {
       if (selectedClusterFilter !== 'all' && String(b.cluster_id) !== selectedClusterFilter) {
+        return false;
+      }
+      if (tierFilter !== 'all' && b.prioritization_category !== tierFilter) {
         return false;
       }
       if (b.roc_auc < minAuc) return false;
@@ -40,6 +48,7 @@ export const BiomarkerDiscoveryPage: React.FC<BiomarkerDiscoveryPageProps> = ({
     const headers = [
       'Gene_Symbol',
       'Cluster_ID',
+      'Cluster_Name',
       'Rank',
       'Composite_Score',
       'Log2_FC',
@@ -47,10 +56,14 @@ export const BiomarkerDiscoveryPage: React.FC<BiomarkerDiscoveryPageProps> = ({
       'ROC_AUC',
       'Specificity',
       'Prioritization_Tier',
+      'Drug_Target_Class',
+      'Approved_Drugs',
+      'Clinical_Phase',
     ];
     const rows = filtered.map((b) => [
       b.gene_symbol,
       b.cluster_id,
+      `"${b.cluster_name || `Cluster ${b.cluster_id}`}"`,
       b.rank,
       b.composite_score,
       b.log2_fc,
@@ -58,6 +71,9 @@ export const BiomarkerDiscoveryPage: React.FC<BiomarkerDiscoveryPageProps> = ({
       b.roc_auc,
       b.specificity,
       b.prioritization_category,
+      `"${b.druggability?.target_class || 'N/A'}"`,
+      `"${b.druggability?.approved_drugs?.join('; ') || 'Investigational'}"`,
+      `"${b.druggability?.clinical_phase || 'Preclinical'}"`,
     ]);
 
     const csvContent =
@@ -66,36 +82,40 @@ export const BiomarkerDiscoveryPage: React.FC<BiomarkerDiscoveryPageProps> = ({
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement('a');
     link.setAttribute('href', encodedUri);
-    link.setAttribute('download', `CellMap_Biomarkers_${selectedClusterFilter}.csv`);
+    link.setAttribute('download', `CellMap_Biomarker_Dossier_${selectedClusterFilter}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
   };
 
+  const activeClusterId = selectedClusterFilter !== 'all' ? Number(selectedClusterFilter) : 0;
+  const activeClusterName = biomarkers.find((b) => b.cluster_id === activeClusterId)?.cluster_name || `Cluster ${activeClusterId}`;
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
       {/* Header Banner */}
       <div className="glass-card">
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '16px' }}>
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <Dna size={20} color="var(--cyan-400)" />
               <h3 style={{ fontSize: '18px', fontWeight: 800, color: 'var(--text-primary)' }}>
-                Multi-Criteria Single-Cell Biomarker Discovery
+                Multi-Criteria Single-Cell Biomarker Discovery &amp; Therapeutic Targetability
               </h3>
             </div>
             <p style={{ fontSize: '13px', color: 'var(--text-muted)', marginTop: '4px' }}>
-              Composite prioritization integrating Wilcoxon effect size, Benjamini-Hochberg FDR, cluster specificity, and classification ROC-AUC.
+              Composite prioritization integrating Wilcoxon effect size, Benjamini-Hochberg FDR, cluster specificity, classification ROC-AUC, and DGIdb drug targetability.
             </p>
           </div>
 
           <button
             id="btn-export-biomarkers-csv"
-            className="btn btn-secondary"
+            className="btn btn-primary"
             onClick={handleExportCSV}
+            style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
           >
             <Download size={14} />
-            <span>Download Biomarkers CSV</span>
+            <span>Export Clinical Biomarker Dossier (CSV)</span>
           </button>
         </div>
       </div>
@@ -109,6 +129,13 @@ export const BiomarkerDiscoveryPage: React.FC<BiomarkerDiscoveryPageProps> = ({
         selectedGene={selectedBiomarker?.gene_symbol}
       />
 
+      {/* Gene Set Enrichment Analysis (GSEA) for Active Cluster */}
+      <PathwayEnrichmentCard
+        pathways={pathways}
+        selectedClusterId={activeClusterId}
+        clusterName={activeClusterName}
+      />
+
       {/* Search & Filter Bar */}
       <div className="glass-card" style={{ padding: '16px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '14px' }}>
@@ -118,7 +145,7 @@ export const BiomarkerDiscoveryPage: React.FC<BiomarkerDiscoveryPageProps> = ({
             <input
               type="text"
               className="form-input"
-              placeholder="Search candidate gene..."
+              placeholder="Search candidate gene symbol..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               style={{ width: '100%' }}
@@ -127,18 +154,33 @@ export const BiomarkerDiscoveryPage: React.FC<BiomarkerDiscoveryPageProps> = ({
 
           {/* Cluster filter */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Cluster:</span>
+            <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Population:</span>
             <select
               className="form-select"
               value={selectedClusterFilter}
               onChange={(e) => setSelectedClusterFilter(e.target.value)}
             >
-              <option value="all">All Clusters</option>
-              <option value="0">Cluster 0 (T Cells)</option>
-              <option value="1">Cluster 1 (B Cells)</option>
-              <option value="2">Cluster 2 (Monocytes)</option>
-              <option value="3">Cluster 3 (NK Cells)</option>
-              <option value="4">Cluster 4 (Dendritic)</option>
+              <option value="all">All Populations</option>
+              <option value="0">Cluster 0</option>
+              <option value="1">Cluster 1</option>
+              <option value="2">Cluster 2</option>
+              <option value="3">Cluster 3</option>
+              <option value="4">Cluster 4</option>
+            </select>
+          </div>
+
+          {/* Tier Filter */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Tier:</span>
+            <select
+              className="form-select"
+              value={tierFilter}
+              onChange={(e) => setTierFilter(e.target.value)}
+            >
+              <option value="all">All Tiers</option>
+              <option value="Tier 1">Tier 1 (High Confidence)</option>
+              <option value="Tier 2">Tier 2 (Emerging Candidate)</option>
+              <option value="Tier 3">Tier 3 (Discovery)</option>
             </select>
           </div>
 
@@ -179,10 +221,10 @@ export const BiomarkerDiscoveryPage: React.FC<BiomarkerDiscoveryPageProps> = ({
       <div className="glass-card">
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
           <h4 style={{ fontSize: '15px', fontWeight: 700, color: 'var(--text-primary)' }}>
-            Ranked Candidate Biomarkers ({filtered.length} Genes Identified)
+            Ranked Candidate Biomarkers ({filtered.length} Genes Evaluated)
           </h4>
           <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
-            Click any row to view score explainability & ROC curve
+            Click any row to open the complete Target Dossier &amp; ROC Curve
           </span>
         </div>
 
@@ -198,6 +240,7 @@ export const BiomarkerDiscoveryPage: React.FC<BiomarkerDiscoveryPageProps> = ({
                 <th>Adj P-Value (BH)</th>
                 <th>ROC-AUC</th>
                 <th>Specificity</th>
+                <th>Druggability &amp; Clinical Phase</th>
                 <th>Prioritization Tier</th>
               </tr>
             </thead>
@@ -208,7 +251,7 @@ export const BiomarkerDiscoveryPage: React.FC<BiomarkerDiscoveryPageProps> = ({
                   style={{ cursor: 'pointer' }}
                   onClick={() => setSelectedBiomarker(b)}
                 >
-                  <td style={{ fontWeight: 700, color: 'var(--cyan-400)' }}>
+                  <td style={{ fontWeight: 700, color: 'var(--cyan-400)', fontFamily: 'var(--font-mono)' }}>
                     {b.gene_symbol}
                   </td>
                   <td>
@@ -248,6 +291,20 @@ export const BiomarkerDiscoveryPage: React.FC<BiomarkerDiscoveryPageProps> = ({
                     </span>
                   </td>
                   <td className="mono">{(b.specificity * 100).toFixed(0)}%</td>
+                  <td>
+                    {b.druggability ? (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                        <span style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-primary)' }}>
+                          {b.druggability.target_class}
+                        </span>
+                        <span style={{ fontSize: '10px', color: b.druggability.clinical_phase.includes('FDA') ? 'var(--emerald-400)' : 'var(--amber-400)' }}>
+                          {b.druggability.clinical_phase}
+                        </span>
+                      </div>
+                    ) : (
+                      <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Research Target</span>
+                    )}
+                  </td>
                   <td>
                     <span
                       className={`badge ${
